@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Toe-Toe Boxing</title>
+  <style>
+    body {
+      margin: 0;
+      background: #111;
+      color: #fff;
+      font-family: sans-serif;
+      text-align: center;
+    }
+    #gameCanvas {
+      background: #222;
+      display: block;
+      margin: 20px auto;
+      border: 2px solid #fff;
+    }
+    #info {
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Toe-Toe Boxing</h1>
+  <canvas id="gameCanvas" width="800" height="400"></canvas>
+  <div id="info">
+    <p>Player 1: A/D = move, W = punch</p>
+    <p>Player 2: J/L = move, I = punch</p>
+    <p>First to reduce the other’s HP to 0 wins!</p>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+
+    // Game state
+    const groundY = 300;
+
+    const player1 = {
+      x: 200,
+      y: groundY,
+      width: 40,
+      height: 80,
+      color: "#4CAF50",
+      hp: 100,
+      facing: 1, // 1 = right
+      punching: false,
+      punchTimer: 0
+    };
+
+    const player2 = {
+      x: 560,
+      y: groundY,
+      width: 40,
+      height: 80,
+      color: "#F44336",
+      hp: 100,
+      facing: -1, // -1 = left
+      punching: false,
+      punchTimer: 0
+    };
+
+    const keys = {};
+
+    document.addEventListener("keydown", (e) => {
+      keys[e.key] = true;
+    });
+
+    document.addEventListener("keyup", (e) => {
+      keys[e.key] = false;
+    });
+
+    function update() {
+      const speed = 4;
+
+      // Player 1 movement (A/D)
+      if (keys["a"] || keys["A"]) {
+        player1.x -= speed;
+        player1.facing = -1;
+      }
+      if (keys["d"] || keys["D"]) {
+        player1.x += speed;
+        player1.facing = 1;
+      }
+
+      // Player 2 movement (J/L)
+      if (keys["j"] || keys["J"]) {
+        player2.x -= speed;
+        player2.facing = -1;
+      }
+      if (keys["l"] || keys["L"]) {
+        player2.x += speed;
+        player2.facing = 1;
+      }
+
+      // Clamp positions
+      player1.x = Math.max(50, Math.min(canvas.width - 90, player1.x));
+      player2.x = Math.max(50, Math.min(canvas.width - 90, player2.x));
+
+      // Punch controls
+      if ((keys["w"] || keys["W"]) && !player1.punching) {
+        player1.punching = true;
+        player1.punchTimer = 10;
+        checkPunch(player1, player2);
+      }
+
+      if ((keys["i"] || keys["I"]) && !player2.punching) {
+        player2.punching = true;
+        player2.punchTimer = 10;
+        checkPunch(player2, player1);
+      }
+
+      // Punch timers
+      if (player1.punching) {
+        player1.punchTimer--;
+        if (player1.punchTimer <= 0) player1.punching = false;
+      }
+
+      if (player2.punching) {
+        player2.punchTimer--;
+        if (player2.punchTimer <= 0) player2.punching = false;
+      }
+    }
+
+    function checkPunch(attacker, defender) {
+      // Simple hitbox in front of attacker
+      const punchRange = 50;
+      const punchBox = {
+        x: attacker.facing === 1 ? attacker.x + attacker.width : attacker.x - punchRange,
+        y: attacker.y,
+        width: punchRange,
+        height: attacker.height
+      };
+
+      const defenderBox = {
+        x: defender.x,
+        y: defender.y,
+        width: defender.width,
+        height: defender.height
+      };
+
+      if (rectIntersect(punchBox, defenderBox)) {
+        defender.hp -= 10;
+        if (defender.hp < 0) defender.hp = 0;
+      }
+    }
+
+    function rectIntersect(a, b) {
+      return (
+        a.x < b.x + b.width &&
+        a.x + a.width > b.x &&
+        a.y < b.y + b.height &&
+        a.y + a.height > b.y
+      );
+    }
+
+    function drawBoxer(p) {
+      // Body
+      ctx.fillStyle = p.color;
+      ctx.fillRect(p.x, p.y - p.height, p.width, p.height);
+
+      // Gloves (simple circles)
+      ctx.fillStyle = "#FFD700";
+      const gloveOffset = p.facing === 1 ? p.width : -10;
+      const gloveX = p.x + gloveOffset;
+      const gloveY = p.y - p.height + 30;
+
+      ctx.beginPath();
+      ctx.arc(gloveX, gloveY, 10, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Punch extension
+      if (p.punching) {
+        const punchX = gloveX + (p.facing === 1 ? 15 : -15);
+        ctx.beginPath();
+        ctx.arc(punchX, gloveY, 10, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    function drawHPBars() {
+      // Player 1 HP
+      ctx.fillStyle = "#555";
+      ctx.fillRect(50, 30, 300, 20);
+      ctx.fillStyle = "#4CAF50";
+      ctx.fillRect(50, 30, 3 * player1.hp, 20);
+
+      // Player 2 HP
+      ctx.fillStyle = "#555";
+      ctx.fillRect(canvas.width - 350, 30, 300, 20);
+      ctx.fillStyle = "#F44336";
+      ctx.fillRect(canvas.width - 350, 30, 3 * player2.hp, 20);
+
+      ctx.fillStyle = "#fff";
+      ctx.font = "16px sans-serif";
+      ctx.fillText("P1 HP: " + player1.hp, 50, 25);
+      ctx.fillText("P2 HP: " + player2.hp, canvas.width - 350, 25);
+    }
+
+    function drawRing() {
+      ctx.fillStyle = "#333";
+      ctx.fillRect(0, groundY + 10, canvas.width, 90);
+
+      ctx.strokeStyle = "#888";
+      ctx.lineWidth = 4;
+      ctx.strokeRect(40, groundY - 120, canvas.width - 80, 200);
+    }
+
+    function drawWinner() {
+      if (player1.hp <= 0 || player2.hp <= 0) {
+        ctx.fillStyle = "rgba(0,0,0,0.7)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.fillStyle = "#fff";
+        ctx.font = "40px sans-serif";
+        let text;
+        if (player1.hp <= 0 && player2.hp <= 0) {
+          text = "Draw!";
+        } else if (player1.hp <= 0) {
+          text = "Player 2 Wins!";
+        } else {
+          text = "Player 1 Wins!";
+        }
+        ctx.fillText(text, canvas.width / 2 - ctx.measureText(text).width / 2, canvas.height / 2);
+
+        ctx.font = "20px sans-serif";
+        const restart = "Refresh page to play again";
+        ctx.fillText(
+          restart,
+          canvas.width / 2 - ctx.measureText(restart).width / 2,
+          canvas.height / 2 + 40
+        );
+      }
+    }
+
+    function gameLoop() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      update();
+      drawRing();
+      drawBoxer(player1);
+      drawBoxer(player2);
+      drawHPBars();
+      drawWinner();
+
+      requestAnimationFrame(gameLoop);
+    }
+
+    gameLoop();
+  </script>
+</body>
+</html>
