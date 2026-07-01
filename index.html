@@ -2,253 +2,223 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Toe-Toe Boxing</title>
+  <title>Toe-Toe 3D Boxing</title>
   <style>
     body {
       margin: 0;
-      background: #111;
+      overflow: hidden;
+      background: #000;
       color: #fff;
       font-family: sans-serif;
+    }
+    #hud {
+      position: fixed;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
       text-align: center;
-    }
-    #gameCanvas {
-      background: #222;
-      display: block;
-      margin: 20px auto;
-      border: 2px solid #fff;
-    }
-    #info {
-      margin-top: 10px;
+      color: #fff;
+      z-index: 10;
     }
   </style>
 </head>
 <body>
-  <h1>Toe-Toe Boxing</h1>
-  <canvas id="gameCanvas" width="800" height="400"></canvas>
-  <div id="info">
-    <p>Player 1: A/D = move, W = punch</p>
-    <p>Player 2: J/L = move, I = punch</p>
-    <p>First to reduce the other’s HP to 0 wins!</p>
+  <div id="hud">
+    <h2>Toe-Toe 3D Boxing</h2>
+    <p>Player 1: A/D move, W punch</p>
+    <p>Player 2: J/L move, I punch</p>
   </div>
 
+  <!-- Three.js CDN -->
+  <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+
   <script>
-    const canvas = document.getElementById("gameCanvas");
-    const ctx = canvas.getContext("2d");
+    // Basic setup
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x111111);
 
-    // Game state
-    const groundY = 300;
+    const camera = new THREE.PerspectiveCamera(
+      60,
+      window.innerWidth / window.innerHeight,
+      0.1,
+      1000
+    );
+    camera.position.set(0, 8, 18);
+    camera.lookAt(0, 3, 0);
 
-    const player1 = {
-      x: 200,
-      y: groundY,
-      width: 40,
-      height: 80,
-      color: "#4CAF50",
-      hp: 100,
-      facing: 1, // 1 = right
-      punching: false,
-      punchTimer: 0
-    };
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
 
-    const player2 = {
-      x: 560,
-      y: groundY,
-      width: 40,
-      height: 80,
-      color: "#F44336",
-      hp: 100,
-      facing: -1, // -1 = left
-      punching: false,
-      punchTimer: 0
-    };
+    // Lights
+    const hemiLight = new THREE.HemisphereLight(0xffffff, 0x222222, 0.7);
+    scene.add(hemiLight);
 
-    const keys = {};
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    dirLight.position.set(10, 15, 5);
+    scene.add(dirLight);
 
-    document.addEventListener("keydown", (e) => {
-      keys[e.key] = true;
-    });
+    // Ring (floor)
+    const ringGeo = new THREE.BoxGeometry(16, 0.5, 10);
+    const ringMat = new THREE.MeshStandardMaterial({ color: 0x333333 });
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.position.y = 0;
+    scene.add(ring);
 
-    document.addEventListener("keyup", (e) => {
-      keys[e.key] = false;
-    });
-
-    function update() {
-      const speed = 4;
-
-      // Player 1 movement (A/D)
-      if (keys["a"] || keys["A"]) {
-        player1.x -= speed;
-        player1.facing = -1;
-      }
-      if (keys["d"] || keys["D"]) {
-        player1.x += speed;
-        player1.facing = 1;
-      }
-
-      // Player 2 movement (J/L)
-      if (keys["j"] || keys["J"]) {
-        player2.x -= speed;
-        player2.facing = -1;
-      }
-      if (keys["l"] || keys["L"]) {
-        player2.x += speed;
-        player2.facing = 1;
-      }
-
-      // Clamp positions
-      player1.x = Math.max(50, Math.min(canvas.width - 90, player1.x));
-      player2.x = Math.max(50, Math.min(canvas.width - 90, player2.x));
-
-      // Punch controls
-      if ((keys["w"] || keys["W"]) && !player1.punching) {
-        player1.punching = true;
-        player1.punchTimer = 10;
-        checkPunch(player1, player2);
-      }
-
-      if ((keys["i"] || keys["I"]) && !player2.punching) {
-        player2.punching = true;
-        player2.punchTimer = 10;
-        checkPunch(player2, player1);
-      }
-
-      // Punch timers
-      if (player1.punching) {
-        player1.punchTimer--;
-        if (player1.punchTimer <= 0) player1.punching = false;
-      }
-
-      if (player2.punching) {
-        player2.punchTimer--;
-        if (player2.punchTimer <= 0) player2.punching = false;
-      }
+    // Ropes (simple boxes)
+    function addRope(z, color) {
+      const ropeGeo = new THREE.BoxGeometry(16, 0.1, 0.1);
+      const ropeMat = new THREE.MeshStandardMaterial({ color });
+      const rope = new THREE.Mesh(ropeGeo, ropeMat);
+      rope.position.set(0, 2, z);
+      scene.add(rope);
     }
+    addRope(-5, 0xffffff);
+    addRope(5, 0xffffff);
 
-    function checkPunch(attacker, defender) {
-      // Simple hitbox in front of attacker
-      const punchRange = 50;
-      const punchBox = {
-        x: attacker.facing === 1 ? attacker.x + attacker.width : attacker.x - punchRange,
-        y: attacker.y,
-        width: punchRange,
-        height: attacker.height
-      };
+    // Fighters
+    function createFighter(color) {
+      const group = new THREE.Group();
 
-      const defenderBox = {
-        x: defender.x,
-        y: defender.y,
-        width: defender.width,
-        height: defender.height
-      };
-
-      if (rectIntersect(punchBox, defenderBox)) {
-        defender.hp -= 10;
-        if (defender.hp < 0) defender.hp = 0;
-      }
-    }
-
-    function rectIntersect(a, b) {
-      return (
-        a.x < b.x + b.width &&
-        a.x + a.width > b.x &&
-        a.y < b.y + b.height &&
-        a.y + a.height > b.y
-      );
-    }
-
-    function drawBoxer(p) {
       // Body
-      ctx.fillStyle = p.color;
-      ctx.fillRect(p.x, p.y - p.height, p.width, p.height);
+      const bodyGeo = new THREE.BoxGeometry(1.2, 3, 1);
+      const bodyMat = new THREE.MeshStandardMaterial({ color });
+      const body = new THREE.Mesh(bodyGeo, bodyMat);
+      body.position.y = 1.5;
+      group.add(body);
 
-      // Gloves (simple circles)
-      ctx.fillStyle = "#FFD700";
-      const gloveOffset = p.facing === 1 ? p.width : -10;
-      const gloveX = p.x + gloveOffset;
-      const gloveY = p.y - p.height + 30;
+      // Head
+      const headGeo = new THREE.SphereGeometry(0.7, 16, 16);
+      const headMat = new THREE.MeshStandardMaterial({ color: 0xffddaa });
+      const head = new THREE.Mesh(headGeo, headMat);
+      head.position.y = 3.4;
+      group.add(head);
 
-      ctx.beginPath();
-      ctx.arc(gloveX, gloveY, 10, 0, Math.PI * 2);
-      ctx.fill();
+      // Right arm (punching)
+      const armGeo = new THREE.BoxGeometry(0.4, 1.6, 0.4);
+      const armMat = new THREE.MeshStandardMaterial({ color });
+      const arm = new THREE.Mesh(armGeo, armMat);
+      arm.position.set(0.9, 2.2, 0.5);
+      arm.rotation.z = Math.PI / 6;
+      group.add(arm);
 
-      // Punch extension
-      if (p.punching) {
-        const punchX = gloveX + (p.facing === 1 ? 15 : -15);
-        ctx.beginPath();
-        ctx.arc(punchX, gloveY, 10, 0, Math.PI * 2);
-        ctx.fill();
+      // Glove
+      const gloveGeo = new THREE.SphereGeometry(0.4, 16, 16);
+      const gloveMat = new THREE.MeshStandardMaterial({ color: 0xff0000 });
+      const glove = new THREE.Mesh(gloveGeo, gloveMat);
+      glove.position.set(1.3, 1.7, 0.7);
+      group.add(glove);
+
+      group.userData = {
+        body,
+        arm,
+        glove,
+        punchTimer: 0,
+        hp: 100
+      };
+
+      return group;
+    }
+
+    const fighter1 = createFighter(0x4caf50);
+    fighter1.position.set(-4, 0, 0);
+    scene.add(fighter1);
+
+    const fighter2 = createFighter(0xf44336);
+    fighter2.position.set(4, 0, 0);
+    fighter2.rotation.y = Math.PI; // face left
+    scene.add(fighter2);
+
+    // Keyboard
+    const keys = {};
+    window.addEventListener("keydown", (e) => (keys[e.key] = true));
+    window.addEventListener("keyup", (e) => (keys[e.key] = false));
+
+    // Simple HP display in console (you can improve this)
+    function logHP() {
+      console.log("P1 HP:", fighter1.userData.hp, " | P2 HP:", fighter2.userData.hp);
+    }
+
+    function updateFighter(fighter, leftKey, rightKey, punchKey, dt) {
+      const speed = 5;
+      if (keys[leftKey]) {
+        fighter.position.x -= speed * dt;
+      }
+      if (keys[rightKey]) {
+        fighter.position.x += speed * dt;
+      }
+
+      // Clamp inside ring
+      fighter.position.x = Math.max(-6, Math.min(6, fighter.position.x));
+
+      // Punch
+      const data = fighter.userData;
+      if (keys[punchKey] && data.punchTimer <= 0) {
+        data.punchTimer = 0.25; // seconds
+      }
+
+      // Animate punch
+      if (data.punchTimer > 0) {
+        data.punchTimer -= dt;
+        const t = Math.max(data.punchTimer, 0);
+        const punchAmount = Math.sin((0.25 - t) * Math.PI * 4) * 0.6;
+
+        data.arm.rotation.x = -punchAmount;
+        data.glove.position.z = 0.7 + punchAmount * 1.2;
+      } else {
+        data.arm.rotation.x = 0;
+        data.glove.position.z = 0.7;
       }
     }
 
-    function drawHPBars() {
-      // Player 1 HP
-      ctx.fillStyle = "#555";
-      ctx.fillRect(50, 30, 300, 20);
-      ctx.fillStyle = "#4CAF50";
-      ctx.fillRect(50, 30, 3 * player1.hp, 20);
+    function checkHit(attacker, defender) {
+      const a = attacker.userData.glove;
+      const d = defender.userData.body;
 
-      // Player 2 HP
-      ctx.fillStyle = "#555";
-      ctx.fillRect(canvas.width - 350, 30, 300, 20);
-      ctx.fillStyle = "#F44336";
-      ctx.fillRect(canvas.width - 350, 30, 3 * player2.hp, 20);
+      const glovePos = new THREE.Vector3();
+      a.getWorldPosition(glovePos);
 
-      ctx.fillStyle = "#fff";
-      ctx.font = "16px sans-serif";
-      ctx.fillText("P1 HP: " + player1.hp, 50, 25);
-      ctx.fillText("P2 HP: " + player2.hp, canvas.width - 350, 25);
-    }
+      const bodyPos = new THREE.Vector3();
+      d.getWorldPosition(bodyPos);
 
-    function drawRing() {
-      ctx.fillStyle = "#333";
-      ctx.fillRect(0, groundY + 10, canvas.width, 90);
-
-      ctx.strokeStyle = "#888";
-      ctx.lineWidth = 4;
-      ctx.strokeRect(40, groundY - 120, canvas.width - 80, 200);
-    }
-
-    function drawWinner() {
-      if (player1.hp <= 0 || player2.hp <= 0) {
-        ctx.fillStyle = "rgba(0,0,0,0.7)";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-        ctx.fillStyle = "#fff";
-        ctx.font = "40px sans-serif";
-        let text;
-        if (player1.hp <= 0 && player2.hp <= 0) {
-          text = "Draw!";
-        } else if (player1.hp <= 0) {
-          text = "Player 2 Wins!";
-        } else {
-          text = "Player 1 Wins!";
-        }
-        ctx.fillText(text, canvas.width / 2 - ctx.measureText(text).width / 2, canvas.height / 2);
-
-        ctx.font = "20px sans-serif";
-        const restart = "Refresh page to play again";
-        ctx.fillText(
-          restart,
-          canvas.width / 2 - ctx.measureText(restart).width / 2,
-          canvas.height / 2 + 40
-        );
+      const dist = glovePos.distanceTo(bodyPos);
+      if (dist < 1.2) {
+        defender.userData.hp -= 2;
+        if (defender.userData.hp < 0) defender.userData.hp = 0;
+        logHP();
       }
     }
 
-    function gameLoop() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    let lastTime = performance.now();
 
-      update();
-      drawRing();
-      drawBoxer(player1);
-      drawBoxer(player2);
-      drawHPBars();
-      drawWinner();
+    function animate() {
+      const now = performance.now();
+      const dt = (now - lastTime) / 1000;
+      lastTime = now;
 
-      requestAnimationFrame(gameLoop);
+      updateFighter(fighter1, "a", "d", "w", dt);
+      updateFighter(fighter2, "j", "l", "i", dt);
+
+      // Check hits when punching
+      if (fighter1.userData.punchTimer > 0.18) {
+        checkHit(fighter1, fighter2);
+      }
+      if (fighter2.userData.punchTimer > 0.18) {
+        checkHit(fighter2, fighter1);
+      }
+
+      renderer.render(scene, camera);
+      requestAnimationFrame(animate);
     }
 
-    gameLoop();
+    animate();
+
+    // Resize
+    window.addEventListener("resize", () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
   </script>
 </body>
 </html>
